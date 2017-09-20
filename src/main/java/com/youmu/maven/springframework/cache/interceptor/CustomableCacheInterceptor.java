@@ -25,25 +25,18 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.aopalliance.intercept.MethodInterceptor;
 import org.springframework.aop.framework.AopProxyUtils;
-import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
-import org.springframework.beans.factory.annotation.BeanFactoryAnnotationUtils;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.interceptor.CacheEvictOperation;
 import org.springframework.cache.interceptor.CacheOperation;
-import org.springframework.cache.interceptor.CacheOperationInvocationContext;
 import org.springframework.cache.interceptor.CacheOperationInvoker;
-import org.springframework.cache.interceptor.CacheOperationSource;
 import org.springframework.cache.interceptor.CachePutOperation;
 import org.springframework.cache.interceptor.CacheResolver;
 import org.springframework.cache.interceptor.CacheableOperation;
-import org.springframework.cache.interceptor.CompositeCacheOperationSource;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.cache.interceptor.SimpleCacheResolver;
-import org.springframework.cache.interceptor.SimpleKeyGenerator;
-import org.springframework.context.ApplicationContext;
 import org.springframework.context.expression.AnnotatedElementKey;
 import org.springframework.lang.UsesJava8;
 import org.springframework.util.Assert;
@@ -75,169 +68,24 @@ public class CustomableCacheInterceptor
         }
     }
 
-    //do not serialize cache
+    // do not serialize cache
     private final transient Map<CacheOperationCacheKey, CacheOperationMetadata> metadataCache = new ConcurrentHashMap<>(
             1024);
 
     private final CacheOperationExpressionEvaluator evaluator = new CacheOperationExpressionEvaluator();
 
-    private CacheOperationSource cacheOperationSource;
-
-    private KeyGenerator keyGenerator = new SimpleKeyGenerator();
-
-    private CacheResolver cacheResolver;
-
-    private BeanFactory beanFactory;
-
     private boolean initialized = false;
-
-    /**
-     * Set one or more cache operation sources which are used to find the cache
-     * attributes. If more than one source is provided, they will be aggregated
-     * using a {@link CompositeCacheOperationSource}.
-     */
-    @Override
-    public void setCacheOperationSources(CacheOperationSource... cacheOperationSources) {
-        Assert.notEmpty(cacheOperationSources,
-                "At least 1 CacheOperationSource needs to be specified");
-        this.cacheOperationSource = (cacheOperationSources.length > 1
-                ? new CompositeCacheOperationSource(cacheOperationSources)
-                : cacheOperationSources[0]);
-    }
-
-    /**
-     * Return the CacheOperationSource for this cache aspect.
-     */
-    public CacheOperationSource getCacheOperationSource() {
-        return this.cacheOperationSource;
-    }
-
-    /**
-     * Set the default {@link KeyGenerator} that this cache aspect should
-     * delegate to if no specific key generator has been set for the operation.
-     * <p>
-     * The default is a {@link SimpleKeyGenerator}
-     */
-    public void setKeyGenerator(KeyGenerator keyGenerator) {
-        this.keyGenerator = keyGenerator;
-    }
-
-    /**
-     * Return the default {@link KeyGenerator} that this cache aspect delegates
-     * to.
-     */
-    public KeyGenerator getKeyGenerator() {
-        return this.keyGenerator;
-    }
-
-    /**
-     * Set the {@link CacheManager} to use to create a default
-     * {@link CacheResolver}. Replace the current {@link CacheResolver}, if any.
-     * @see #setCacheResolver(CacheResolver)
-     * @see SimpleCacheResolver
-     */
-    public void setCacheManager(CacheManager cacheManager) {
-        this.cacheResolver = new SimpleCacheResolver(cacheManager);
-    }
-
-    /**
-     * Set the default {@link CacheResolver} that this cache aspect should
-     * delegate to if no specific cache resolver has been set for the operation.
-     * <p>
-     * The default resolver resolves the caches against their names and the
-     * default cache manager.
-     * @see #setCacheManager(org.springframework.cache.CacheManager)
-     * @see SimpleCacheResolver
-     */
-    public void setCacheResolver(CacheResolver cacheResolver) {
-        Assert.notNull(cacheResolver, "CacheResolver must not be null");
-        this.cacheResolver = cacheResolver;
-    }
-
-    /**
-     * Return the default {@link CacheResolver} that this cache aspect delegates
-     * to.
-     */
-    public CacheResolver getCacheResolver() {
-        return this.cacheResolver;
-    }
-
-    /**
-     * Set the containing {@link BeanFactory} for {@link CacheManager} and other
-     * service lookups.
-     * @since 4.3
-     */
-    @Override
-    public void setBeanFactory(BeanFactory beanFactory) {
-        this.beanFactory = beanFactory;
-    }
-
-    /**
-     * @deprecated as of 4.3, in favor of {@link #setBeanFactory}
-     */
-    @Deprecated
-    public void setApplicationContext(ApplicationContext applicationContext) {
-        this.beanFactory = applicationContext;
-    }
-
-    @Override
-    public void afterPropertiesSet() {
-        Assert.state(getCacheOperationSource() != null,
-                "The 'cacheOperationSources' property is required: "
-                        + "If there are no cacheable methods, then don't use a cache aspect.");
-        Assert.state(getErrorHandler() != null, "The 'errorHandler' property is required");
-    }
-
-    @Override
-    public void afterSingletonsInstantiated() {
-        if (getCacheResolver() == null) {
-            // Lazily initialize cache resolver via default cache manager...
-            try {
-                setCacheManager(this.beanFactory.getBean(CacheManager.class));
-            } catch (NoUniqueBeanDefinitionException ex) {
-                throw new IllegalStateException(
-                        "No CacheResolver specified, and no unique bean of type "
-                                + "CacheManager found. Mark one as primary (or give it the name 'cacheManager') or "
-                                + "declare a specific CacheManager to use, that serves as the default one.");
-            } catch (NoSuchBeanDefinitionException ex) {
-                throw new IllegalStateException(
-                        "No CacheResolver specified, and no bean of type CacheManager found. "
-                                + "Register a CacheManager bean or remove the @EnableCaching annotation from your configuration.");
-            }
-        }
-        this.initialized = true;
-    }
-
-    /**
-     * Convenience method to return a String representation of this Method for
-     * use in logging. Can be overridden in subclasses to provide a different
-     * identifier for the given method.
-     * @param method the method we're interested in
-     * @param targetClass class the method is on
-     * @return log message identifying this method
-     * @see org.springframework.util.ClassUtils#getQualifiedMethodName
-     */
-    protected String methodIdentification(Method method, Class<?> targetClass) {
-        Method specificMethod = ClassUtils.getMostSpecificMethod(method, targetClass);
-        return ClassUtils.getQualifiedMethodName(specificMethod);
-    }
-
-    protected Collection<? extends Cache> getCaches(
-            CacheOperationInvocationContext<CacheOperation> context, CacheResolver cacheResolver) {
-
-        Collection<? extends Cache> caches = cacheResolver.resolveCaches(context);
-        if (caches.isEmpty()) {
-            throw new IllegalStateException("No cache could be resolved for '"
-                    + context.getOperation() + "' using resolver '" + cacheResolver
-                    + "'. At least one cache should be provided per cache operation.");
-        }
-        return caches;
-    }
 
     protected CustomableCacheOperationContext getOperationContext(CacheOperation operation,
             Method method, Object[] args, Object target, Class<?> targetClass) {
         CacheOperationMetadata metadata = getCacheOperationMetadata(operation, method, targetClass);
         return new CustomableCacheOperationContext(metadata, args, target);
+    }
+
+    @Override
+    public void afterSingletonsInstantiated() {
+        super.afterSingletonsInstantiated();
+        this.initialized = true;
     }
 
     /**
@@ -281,23 +129,6 @@ public class CustomableCacheInterceptor
     }
 
     /**
-     * Return a bean with the specified name and type. Used to resolve services
-     * that are referenced by name in a {@link CacheOperation}.
-     * @param beanName the name of the bean, as defined by the operation
-     * @param expectedType type for the bean
-     * @return the bean matching that name
-     * @throws org.springframework.beans.factory.NoSuchBeanDefinitionException
-     *             if such bean does not exist
-     * @see CacheOperation#keyGenerator
-     * @see CacheOperation#cacheManager
-     * @see CacheOperation#cacheResolver
-     */
-    protected <T> T getBean(String beanName, Class<T> expectedType) {
-        return BeanFactoryAnnotationUtils.qualifiedBeanOfType(this.beanFactory, expectedType,
-                beanName);
-    }
-
-    /**
      * Clear the cached metadata.
      */
     protected void clearMetadataCache() {
@@ -319,20 +150,6 @@ public class CustomableCacheInterceptor
             }
         }
 
-        return invoker.invoke();
-    }
-
-    /**
-     * Execute the underlying operation (typically in case of cache miss) and
-     * return the result of the invocation. If an exception occurs it will be
-     * wrapped in a {@link CacheOperationInvoker.ThrowableWrapper}: the
-     * exception can be handled or modified but it <em>must</em> be wrapped in a
-     * {@link CacheOperationInvoker.ThrowableWrapper} as well.
-     * @param invoker the invoker handling the operation being cached
-     * @return the result of the invocation
-     * @see CacheOperationInvoker#invoke()
-     */
-    protected Object invokeOperation(CacheOperationInvoker invoker) {
         return invoker.invoke();
     }
 
@@ -677,130 +494,6 @@ public class CustomableCacheInterceptor
             return super.getCacheNames();
         }
     }
-    // protected class CacheOperationContext
-    // implements CacheOperationInvocationContext<CacheOperation> {
-    //
-    // private final CustomableCacheAspectSupport.CacheOperationMetadata
-    // metadata;
-    //
-    // private final Object[] args;
-    //
-    // private final Object target;
-    //
-    // private final Collection<? extends Cache> caches;
-    //
-    // private final Collection<String> cacheNames;
-    //
-    // private final AnnotatedElementKey methodCacheKey;
-    //
-    // public
-    // CacheOperationContext(CustomableCacheAspectSupport.CacheOperationMetadata
-    // metadata, Object[] args,
-    // Object target) {
-    // this.metadata = metadata;
-    // this.args = extractArgs(metadata.method, args);
-    // this.target = target;
-    // this.caches = CustomableCacheAspectSupport.this.getCaches(this,
-    // metadata.cacheResolver);
-    // this.cacheNames = createCacheNames(this.caches);
-    // this.methodCacheKey = new AnnotatedElementKey(metadata.method,
-    // metadata.targetClass);
-    // }
-    //
-    // @Override
-    // public CacheOperation getOperation() {
-    // return this.metadata.operation;
-    // }
-    //
-    // @Override
-    // public Object getTarget() {
-    // return this.target;
-    // }
-    //
-    // @Override
-    // public Method getMethod() {
-    // return this.metadata.method;
-    // }
-    //
-    // @Override
-    // public Object[] getArgs() {
-    // return this.args;
-    // }
-    //
-    // private Object[] extractArgs(Method method, Object[] args) {
-    // if (!method.isVarArgs()) {
-    // return args;
-    // }
-    // Object[] varArgs = ObjectUtils.toObjectArray(args[args.length - 1]);
-    // Object[] combinedArgs = new Object[args.length - 1 + varArgs.length];
-    // System.arraycopy(args, 0, combinedArgs, 0, args.length - 1);
-    // System.arraycopy(varArgs, 0, combinedArgs, args.length - 1,
-    // varArgs.length);
-    // return combinedArgs;
-    // }
-    //
-    // protected boolean isConditionPassing(Object result) {
-    // if (StringUtils.hasText(this.metadata.operation.getCondition())) {
-    // EvaluationContext evaluationContext = createEvaluationContext(result);
-    // return evaluator.condition(this.metadata.operation.getCondition(),
-    // this.methodCacheKey, evaluationContext);
-    // }
-    // return true;
-    // }
-    //
-    // protected boolean canPutToCache(Object value) {
-    // String unless = "";
-    // if (this.metadata.operation instanceof CacheableOperation) {
-    // unless = ((CacheableOperation) this.metadata.operation).getUnless();
-    // } else if (this.metadata.operation instanceof CachePutOperation) {
-    // unless = ((CachePutOperation) this.metadata.operation).getUnless();
-    // }
-    // if (StringUtils.hasText(unless)) {
-    // EvaluationContext evaluationContext = createEvaluationContext(value);
-    // return !evaluator.unless(unless, this.methodCacheKey, evaluationContext);
-    // }
-    // return true;
-    // }
-    //
-    // /**
-    // * Compute the key for the given caching operation.
-    // * @return the generated key, or {@code null} if none can be generated
-    // */
-    // protected Object generateKey(Object result) {
-    // if (StringUtils.hasText(this.metadata.operation.getKey())) {
-    // EvaluationContext evaluationContext = createEvaluationContext(result);
-    // return evaluator.key(this.metadata.operation.getKey(),
-    // this.methodCacheKey,
-    // evaluationContext);
-    // }
-    // return this.metadata.keyGenerator.generate(this.target,
-    // this.metadata.method,
-    // this.args);
-    // }
-    //
-    // private EvaluationContext createEvaluationContext(Object result) {
-    // return evaluator.createEvaluationContext(this.caches,
-    // this.metadata.method, this.args,
-    // this.target, this.metadata.targetClass, result, beanFactory);
-    // }
-    //
-    // protected Collection<? extends Cache> getCaches() {
-    // return this.caches;
-    // }
-    //
-    // protected Collection<String> getCacheNames() {
-    // return this.cacheNames;
-    // }
-    //
-    // private Collection<String> createCacheNames(Collection<? extends Cache>
-    // caches) {
-    // Collection<String> names = new ArrayList<String>();
-    // for (Cache cache : caches) {
-    // names.add(cache.getName());
-    // }
-    // return names;
-    // }
-    // }
 
     private class CachePutRequest {
 

@@ -1,32 +1,32 @@
 package com.youmu.maven.springframework.cache.config;
 
-import com.youmu.maven.springframework.cache.interceptor.CustomableCacheInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.AbstractCachingConfiguration;
 import org.springframework.cache.annotation.AnnotationCacheOperationSource;
-import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.cache.interceptor.CacheErrorHandler;
+import org.springframework.cache.annotation.ProxyCachingConfiguration;
 import org.springframework.cache.interceptor.CacheOperationSource;
-import org.springframework.cache.interceptor.CacheResolver;
-import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Role;
+import org.springframework.core.annotation.AnnotationAttributes;
 import org.springframework.core.annotation.Order;
 
+import com.youmu.maven.springframework.cache.interceptor.CustomableCacheInterceptor;
 import com.youmu.maven.springframework.cache.parser.CustomableCacheAnnotationParser;
 import com.youmu.maven.springframework.cache.parser.ExpireableCacheAnnotationParser;
+import org.springframework.core.type.AnnotationMetadata;
 
 @EnableCaching
 @Configuration
 @Order
-public class CacheConfig implements CachingConfigurer {
+public class CacheConfig extends ProxyCachingConfiguration {
 
     @Autowired(required = false)
-    CustomableCacheAnnotationParser cacheAnnotationParser;
+    private CustomableCacheAnnotationParser cacheAnnotationParser;
 
+    @Override
     @Bean
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
     public CacheOperationSource cacheOperationSource() {
@@ -36,6 +36,7 @@ public class CacheConfig implements CachingConfigurer {
 
     @Bean
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
+    @Override
     public CustomableCacheInterceptor cacheInterceptor() {
         CustomableCacheInterceptor interceptor = new CustomableCacheInterceptor();
         interceptor.setCacheOperationSources(cacheOperationSource());
@@ -53,68 +54,13 @@ public class CacheConfig implements CachingConfigurer {
         return interceptor;
     }
 
-    private CacheManager cacheManager;
-
-    private CacheResolver cacheResolver;
-
-    private KeyGenerator keyGenerator;
-
-    private CacheErrorHandler errorHandler;
-
     @Override
-    public CacheManager cacheManager() {
-        return cacheManager;
+    public void setImportMetadata(AnnotationMetadata importMetadata) {
+        this.enableCaching = AnnotationAttributes.fromMap(
+                importMetadata.getAnnotationAttributes(EnableCaching.class.getName(), false));
+        if (this.enableCaching == null) {
+            throw new IllegalArgumentException(
+                    "@EnableCaching is not present on importing class " + importMetadata.getClassName());
+        }
     }
-
-    @Override
-    public CacheResolver cacheResolver() {
-        return cacheResolver;
-    }
-
-    @Override
-    public KeyGenerator keyGenerator() {
-        return keyGenerator;
-    }
-
-    @Override
-    public CacheErrorHandler errorHandler() {
-        return errorHandler;
-    }
-
-    public void setCacheManager(CacheManager cacheManager) {
-        this.cacheManager = cacheManager;
-    }
-
-    public void setCacheResolver(CacheResolver cacheResolver) {
-        this.cacheResolver = cacheResolver;
-    }
-
-    public void setKeyGenerator(KeyGenerator keyGenerator) {
-        this.keyGenerator = keyGenerator;
-    }
-
-    public void setErrorHandler(CacheErrorHandler errorHandler) {
-        this.errorHandler = errorHandler;
-    }
-
-    // @Bean(name = CacheManagementConfigUtils.CACHE_ADVISOR_BEAN_NAME)
-    // @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
-    // public BeanFactoryCacheOperationSourceAdvisor cacheAdvisor(CacheManager
-    // cacheManager) {
-    // BeanFactoryCacheOperationSourceAdvisor advisor =
-    // new BeanFactoryCacheOperationSourceAdvisor();
-    // advisor.setCacheOperationSource(cacheOperationSource());
-    // advisor.setAdvice(cacheInterceptor(cacheManager));
-    // return advisor;
-    // }
-    //
-    //
-    // @Bean
-    // @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
-    // public CustomableCacheAspectSupport cacheInterceptor(CacheManager cacheManager) {
-    // CustomableCacheAspectSupport interceptor = new CustomableCacheAspectSupport();
-    // interceptor.setCacheOperationSources(cacheOperationSource());
-    // interceptor.setCacheManager(cacheManager);
-    // return interceptor;
-    // }
 }
