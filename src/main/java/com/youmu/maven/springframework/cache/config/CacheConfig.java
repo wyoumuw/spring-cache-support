@@ -7,9 +7,13 @@ import org.springframework.cache.annotation.AnnotationCacheOperationSource;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.annotation.ProxyCachingConfiguration;
 import org.springframework.cache.interceptor.CacheOperationSource;
+import org.springframework.context.annotation.AdviceMode;
+import org.springframework.context.annotation.AutoProxyRegistrar;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Role;
+import org.springframework.core.Ordered;
 import org.springframework.core.annotation.AnnotationAttributes;
 import org.springframework.core.annotation.Order;
 
@@ -18,7 +22,6 @@ import com.youmu.maven.springframework.cache.parser.CustomableCacheAnnotationPar
 import com.youmu.maven.springframework.cache.parser.ExpireableCacheAnnotationParser;
 import org.springframework.core.type.AnnotationMetadata;
 
-@EnableCaching
 @Configuration
 @Order
 public class CacheConfig extends ProxyCachingConfiguration {
@@ -58,9 +61,21 @@ public class CacheConfig extends ProxyCachingConfiguration {
     public void setImportMetadata(AnnotationMetadata importMetadata) {
         this.enableCaching = AnnotationAttributes.fromMap(
                 importMetadata.getAnnotationAttributes(EnableCaching.class.getName(), false));
-        if (this.enableCaching == null) {
-            throw new IllegalArgumentException(
-                    "@EnableCaching is not present on importing class " + importMetadata.getClassName());
+        if (null == this.enableCaching
+                && null == (this.enableCaching = AnnotationAttributes.fromMap(importMetadata
+                        .getAnnotationAttributes(EnableCaching.class.getName(), false)))) {
+            this.enableCaching = getDefaultEnableCachingAttr();
+            // throw new IllegalArgumentException(
+            // "@EnableCaching is not present on importing class " +
+            // importMetadata.getClassName());
         }
+    }
+
+    private AnnotationAttributes getDefaultEnableCachingAttr() {
+        AnnotationAttributes attr = new AnnotationAttributes();
+        attr.put("proxyTargetClass", false);
+        attr.put("mode", AdviceMode.PROXY);
+        attr.put("order", Ordered.LOWEST_PRECEDENCE);
+        return attr;
     }
 }
