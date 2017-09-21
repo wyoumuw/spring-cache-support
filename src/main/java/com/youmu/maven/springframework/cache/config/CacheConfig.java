@@ -2,25 +2,22 @@ package com.youmu.maven.springframework.cache.config;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.cache.annotation.AbstractCachingConfiguration;
 import org.springframework.cache.annotation.AnnotationCacheOperationSource;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.annotation.ProxyCachingConfiguration;
 import org.springframework.cache.interceptor.CacheOperationSource;
 import org.springframework.context.annotation.AdviceMode;
-import org.springframework.context.annotation.AutoProxyRegistrar;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Role;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.AnnotationAttributes;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.type.AnnotationMetadata;
 
 import com.youmu.maven.springframework.cache.interceptor.CustomableCacheInterceptor;
 import com.youmu.maven.springframework.cache.parser.CustomableCacheAnnotationParser;
 import com.youmu.maven.springframework.cache.parser.ExpireableCacheAnnotationParser;
-import org.springframework.core.type.AnnotationMetadata;
 
 @Configuration
 @Order
