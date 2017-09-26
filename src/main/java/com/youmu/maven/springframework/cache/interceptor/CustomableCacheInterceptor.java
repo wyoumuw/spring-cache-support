@@ -72,7 +72,10 @@ public class CustomableCacheInterceptor
     private final transient Map<CacheOperationCacheKey, CacheOperationMetadata> metadataCache = new ConcurrentHashMap<>(
             1024);
 
-    private final CacheOperationExpressionEvaluator evaluator = new CacheOperationExpressionEvaluator();
+    // private final CacheOperationExpressionEvaluator evaluator = new
+    // CacheOperationExpressionEvaluator();
+
+    private COEEContainer coeeContainer = new COEEContainer();
 
     private boolean initialized = false;
 
@@ -133,7 +136,7 @@ public class CustomableCacheInterceptor
      */
     protected void clearMetadataCache() {
         this.metadataCache.clear();
-        this.evaluator.clear();
+        super.clearMetadataCache();
     }
 
     protected Object execute(CacheOperationInvoker invoker, Object target, Method method,
@@ -167,8 +170,8 @@ public class CustomableCacheInterceptor
         if (contexts.isSynchronized()) {
             CustomableCacheOperationContext context = contexts.get(CacheableOperation.class)
                     .iterator().next();
-            if (isConditionPassing(context, CacheOperationExpressionEvaluator.NO_RESULT)) {
-                Object key = generateKey(context, CacheOperationExpressionEvaluator.NO_RESULT);
+            if (isConditionPassing(context, coeeContainer.getNoResult())) {
+                Object key = generateKey(context, coeeContainer.getNoResult());
                 Cache cache = context.getCaches().iterator().next();
                 try {
                     return wrapCacheValue(method, cache.get(key, new Callable<Object>() {
@@ -190,7 +193,7 @@ public class CustomableCacheInterceptor
         }
 
         processCacheEvicts(contexts.get(CacheEvictOperation.class), true,
-                CacheOperationExpressionEvaluator.NO_RESULT);
+                coeeContainer.getNoResult());
 
         // Check if we have a cached item matching the conditions
         Cache.ValueWrapper cacheHit = findCachedItem(contexts.get(CacheableOperation.class));
@@ -198,8 +201,8 @@ public class CustomableCacheInterceptor
         // Collect puts from any @Cacheable miss, if no cached item is found
         List<CachePutRequest> cachePutRequests = new LinkedList<CachePutRequest>();
         if (cacheHit == null) {
-            collectPutRequests(contexts.get(CacheableOperation.class),
-                    CacheOperationExpressionEvaluator.NO_RESULT, cachePutRequests);
+            collectPutRequests(contexts.get(CacheableOperation.class), coeeContainer.getNoResult(),
+                    cachePutRequests);
         }
 
         Object cacheValue;
@@ -253,8 +256,7 @@ public class CustomableCacheInterceptor
         Collection<CustomableCacheOperationContext> excluded = new ArrayList<>();
         for (CustomableCacheOperationContext context : cachePutContexts) {
             try {
-                if (!context
-                        .isConditionPassing(CacheOperationExpressionEvaluator.RESULT_UNAVAILABLE)) {
+                if (!context.isConditionPassing(coeeContainer.getResultUnavailable())) {
                     excluded.add(context);
                 }
             } catch (VariableNotAvailableException ex) {
@@ -312,7 +314,7 @@ public class CustomableCacheInterceptor
      */
     private Cache.ValueWrapper findCachedItem(
             Collection<CustomableCacheOperationContext> contexts) {
-        Object result = CacheOperationExpressionEvaluator.NO_RESULT;
+        Object result = coeeContainer.getNoResult();
         for (CustomableCacheOperationContext context : contexts) {
             if (isConditionPassing(context, result)) {
                 Object key = generateKey(context, result);
