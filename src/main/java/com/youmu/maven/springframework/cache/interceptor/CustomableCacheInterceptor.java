@@ -23,10 +23,10 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.youmu.maven.springframework.cache.interceptor.handler.CacheHandler;
+import com.youmu.maven.springframework.cache.interceptor.handler.DefaultCacheHandler;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.springframework.aop.framework.AopProxyUtils;
-import org.springframework.beans.factory.NoSuchBeanDefinitionException;
-import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.interceptor.CacheEvictOperation;
@@ -76,6 +76,8 @@ public class CustomableCacheInterceptor
     // CacheOperationExpressionEvaluator();
 
     private COEEContainer coeeContainer = new COEEContainer();
+
+    private static final CacheHandler DEFAULT_CACHE_HANDLER = new DefaultCacheHandler();
 
     private boolean initialized = false;
 
@@ -174,12 +176,13 @@ public class CustomableCacheInterceptor
                 Object key = generateKey(context, coeeContainer.getNoResult());
                 Cache cache = context.getCaches().iterator().next();
                 try {
-                    return wrapCacheValue(method, cache.get(key, new Callable<Object>() {
-                        @Override
-                        public Object call() throws Exception {
-                            return unwrapReturnValue(invokeOperation(invoker));
-                        }
-                    }));
+                    return wrapCacheValue(method,
+                            getCacheHandler().get(key, new Callable<Object>() {
+                                @Override
+                                public Object call() throws Exception {
+                                    return unwrapReturnValue(invokeOperation(invoker));
+                                }
+                            }, cache, context.getOperation()));
                 } catch (Cache.ValueRetrievalException ex) {
                     // The invoker wraps any Throwable in a ThrowableWrapper
                     // instance so we
@@ -231,6 +234,10 @@ public class CustomableCacheInterceptor
         processCacheEvicts(contexts.get(CacheEvictOperation.class), false, cacheValue);
 
         return returnValue;
+    }
+
+    protected CacheHandler getCacheHandler() {
+        return null;
     }
 
     private Object wrapCacheValue(Method method, Object cacheValue) {
@@ -352,7 +359,7 @@ public class CustomableCacheInterceptor
 
     private Cache.ValueWrapper findInCaches(CustomableCacheOperationContext context, Object key) {
         for (Cache cache : context.getCaches()) {
-            Cache.ValueWrapper wrapper = doGet(cache, key);
+            Cache.ValueWrapper wrapper = doGet(cache, key, context.getOperation());
             if (wrapper != null) {
                 if (logger.isTraceEnabled()) {
                     logger.trace("Cache entry for key '" + key + "' found in cache '"
@@ -362,6 +369,15 @@ public class CustomableCacheInterceptor
             }
         }
         return null;
+    }
+
+    protected Cache.ValueWrapper doGet(Cache cache, Object key, CacheOperation operation) {
+        try {
+            return getCacheHandler().get(key, cache, operation);
+        } catch (RuntimeException ex) {
+            getErrorHandler().handleCacheGetError(ex, cache, key);
+            return null; // If the exception is handled, return a cache miss
+        }
     }
 
     private boolean isConditionPassing(CustomableCacheOperationContext context, Object result) {
@@ -511,9 +527,17 @@ public class CustomableCacheInterceptor
         public void apply(Object result) {
             if (this.context.canPutToCache(result)) {
                 for (Cache cache : this.context.getCaches()) {
-                    doPut(cache, this.key, result);
+                    doPut(cache, this.key, result, context.getOperation());
                 }
             }
+        }
+    }
+
+    protected void doPut(Cache cache, Object key, Object result, CacheOperation operation) {
+        try {
+            getCacheHandler().put(key, result, cache, operation);
+        } catch (RuntimeException ex) {
+            getErrorHandler().handleCachePutError(ex, cache, key, result);
         }
     }
 
